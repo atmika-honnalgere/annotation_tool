@@ -28,9 +28,9 @@ class SplitDialog(QDialog):
     def accept(self):
         if len(self.images_directory) == 0 or len(self.annotations_file) == 0:
             if len(self.images_directory) == 0:
-                QMessageBox.warning(self, "Images", "Set Images Folder!")
+                QMessageBox.information(self, "Images", "Set Images Folder!")
             elif len(self.annotations_file) == 0:
-                QMessageBox.warning(self, "Annotations", "Set Annotations File!")
+                QMessageBox.information(self, "Annotations", "Set Annotations File!")
 
         else:
             self.splitter.reset()

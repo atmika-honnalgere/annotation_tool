@@ -20,6 +20,7 @@ class ImagesDialog(QDialog):
     def __init__(self, parent):
         super(ImagesDialog, self).__init__(parent)
         self.pick_images = False
+        self.resume_project = False
 
         self.images_directory = ''
         self.masks_directory = ''
@@ -29,12 +30,12 @@ class ImagesDialog(QDialog):
     def accept(self):
         if len(self.images_directory) == 0 or len(self.masks_directory) == 0:
             if len(self.images_directory) == 0:
-                QMessageBox.warning(None, "Images", "Set Images Folder!")
+                QMessageBox.information(self, "Images", "Set Images Folder!")
             elif len(self.masks_directory) == 0:
-                QMessageBox.warning(None, "Masks", "Set Masks Folder!")
+                QMessageBox.information(self, "Masks", "Set Masks Folder!")
 
-        elif len(self.annotations_file) == 0:
-            QMessageBox.warning(None, "Annotations", "Set Annotations File!")
+        elif self.resume_project and len(self.annotations_file) == 0:
+            QMessageBox.information(self, "Annotations", "Set Annotations File!")
 
         else:
             if self.pick_images:
@@ -42,11 +43,13 @@ class ImagesDialog(QDialog):
             else:
                 self.processAllImages.emit()
 
-        super(ImagesDialog, self).accept()
+            super(ImagesDialog, self).accept()
 
     def set_pick_images(self, value):
         self.pick_images = value
 
+    def is_ongoing_project(self):
+        return self.resume_project
 
 class Ui_imagesDialog(object):
     def setupUi(self, imagesDialog):
@@ -123,6 +126,8 @@ class Ui_imagesDialog(object):
         self.lineEdit_2.mouseReleaseEvent = self.lineEdit2_clicked
         self.lineEdit_3.mouseReleaseEvent = self.lineEdit3_clicked
 
+        self.checkBox.setChecked(False)
+
     def retranslateUi(self, imagesDialog):
         _translate = QtCore.QCoreApplication.translate
         imagesDialog.setWindowTitle(_translate("imagesDialog", "Images Dialog"))
@@ -146,8 +151,10 @@ class Ui_imagesDialog(object):
 
     def checkBox_clicked(self):
         if self.checkBox.isChecked():
+            self.dialogBox.resume_project = True
             self.groupBox.show()
         else:
+            self.dialogBox.resume_project = False
             self.groupBox.hide()
 
     def lineEdit_clicked(self, event):

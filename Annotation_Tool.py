@@ -10,8 +10,6 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import QLabel, QMessageBox
-from PyQt5 import QtWebEngineWidgets
-from PyQt5.QtCore import QUrl 
 
 import pprint
 import os
@@ -36,6 +34,7 @@ class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
         MainWindow.resize(800, 600)
+        self.mainWindow = MainWindow
         self.centralwidget = QtWidgets.QWidget(MainWindow)
         self.centralwidget.setObjectName("centralwidget")
         self.verticalLayout = QtWidgets.QVBoxLayout(self.centralwidget)
@@ -64,6 +63,9 @@ class Ui_MainWindow(object):
         self.pushButton_7 = QtWidgets.QPushButton(self.tab)
         self.pushButton_7.setObjectName("pushButton_7")
         self.verticalLayout_3.addWidget(self.pushButton_7)
+        self.pushButton_9 = QtWidgets.QPushButton(self.tab)
+        self.pushButton_9.setObjectName("pushButton_9")
+        self.verticalLayout_3.addWidget(self.pushButton_9)
         self.horizontalLayout.addLayout(self.verticalLayout_3)
         self.textEdit = QtWidgets.QTextEdit(self.tab)
         self.textEdit.setEnabled(True)
@@ -97,16 +99,7 @@ class Ui_MainWindow(object):
         self.horizontalLayout_3.addWidget(self.pushButton_8)
         self.verticalLayout_4.addLayout(self.horizontalLayout_3)
         self.tabWidget.addTab(self.tab_3, "")
-        self.tab_2 = QtWidgets.QWidget()
-        self.tab_2.setEnabled(False)
-        self.tab_2.setObjectName("tab_2")
-        self.verticalLayout_2 = QtWidgets.QVBoxLayout(self.tab_2)
-        self.verticalLayout_2.setObjectName("verticalLayout_2")
-        self.webView = QtWebEngineWidgets.QWebEngineView(self.tab_2)
-        self.webView.setUrl(QtCore.QUrl("about:blank"))
-        self.webView.setObjectName("webView")
-        self.verticalLayout_2.addWidget(self.webView)
-        self.tabWidget.addTab(self.tab_2, "")
+        
         self.verticalLayout.addWidget(self.tabWidget)
         MainWindow.setCentralWidget(self.centralwidget)
         self.menubar = QtWidgets.QMenuBar(MainWindow)
@@ -122,8 +115,6 @@ class Ui_MainWindow(object):
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
         self.imagesDialog = ImagesDialog(MainWindow)
-        ui_imagesDialog = Ui_imagesDialog()
-        ui_imagesDialog.setupUi(self.imagesDialog)
 
         self.json_generator = JSONGenerator()
         self.via_style = False
@@ -133,12 +124,8 @@ class Ui_MainWindow(object):
         self.current_mask_path = ''
 
         self.splitDialog = SplitDialog(MainWindow)
-        ui_splitDialog = Ui_splitDialog()
-        ui_splitDialog.setupUi(self.splitDialog)
 
         self.masksDialog = MasksDialog(MainWindow)
-        ui_masksDialog = Ui_masksDialog()
-        ui_masksDialog.setupUi(self.masksDialog)
 
         ##connect signals
         self.pushButton.clicked.connect(self.pushButton_clicked)
@@ -155,68 +142,76 @@ class Ui_MainWindow(object):
 
         self.pushButton_7.clicked.connect(self.pushButton7_clicked)
 
-        self.webView.loadFinished.connect(self.webView_loaded)
-        self.webView.loadFinished.connect(self.webView_loaded)
-
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "Annotation Tool"))
         self.pushButton_2.setText(_translate("MainWindow", "Edit Annotations"))
         self.pushButton_4.setText(_translate("MainWindow", "Generate JSON for VIA"))
-        self.pushButton.setText(_translate("MainWindow", "Edit JSON for training"))
+        self.pushButton.setText(_translate("MainWindow", "Generate JSON for training"))
         self.pushButton_3.setText(_translate("MainWindow", "Split Dataset"))
         self.pushButton_7.setText(_translate("MainWindow", "Generate Masks"))
+        self.pushButton_9.setText(_translate("MainWindow", "Convert/Combine annotation files"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab), _translate("MainWindow", "JSON Editor"))
         self.pushButton_6.setText(_translate("MainWindow", "Accept"))
         self.pushButton_5.setText(_translate("MainWindow", "Reject"))
         self.pushButton_8.setText(_translate("MainWindow", "Cancel"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_3), _translate("MainWindow", "Image/Mask"))
-        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_2), _translate("MainWindow", "Annotation Editor"))
 
     def pushButton2_clicked(self): ##Open VIA and load annotations
-        # self.tabWidget.setTabEnabled(2, True) ##Tab for displaying images
-        # self.tabWidget.setCurrentIndex(2)
-        # self.webView.load(QUrl("file://" + os.path.abspath("via-master/via-2.x.y/src/index.html")))
         webbrowser.open_new_tab("file://" + os.path.abspath("via-master/via-2.x.y/src/index.html"))
 
     def pushButton7_clicked(self): ##Generate Masks
+        self.masksDialog = MasksDialog(self.mainWindow)
+        ui_masksDialog = Ui_masksDialog()
+        ui_masksDialog.setupUi(self.masksDialog)
         self.masksDialog.exec_()
         
     def pushButton3_clicked(self): ##Split dataset
+        self.splitDialog = SplitDialog(self.mainWindow)
+        ui_splitDialog = Ui_splitDialog()
+        ui_splitDialog.setupUi(self.splitDialog)
         self.splitDialog.exec_()
 
     def pushButton_clicked(self): ##Generate JSON for training
         self.textEdit.clear()
         self.via_style = False
         self.json_generator.clear_annotations()
+
+        self.imagesDialog = ImagesDialog(self.mainWindow)
+        ui_imagesDialog = Ui_imagesDialog()
+        ui_imagesDialog.setupUi(self.imagesDialog)
         self.imagesDialog.exec_()
 
     def pushButton4_clicked(self): ##Generate JSON for VIA
         self.textEdit.clear()
         self.via_style = True
         self.json_generator.clear_annotations()
+
+        self.imagesDialog = ImagesDialog(self.mainWindow)
+        ui_imagesDialog = Ui_imagesDialog()
+        ui_imagesDialog.setupUi(self.imagesDialog)
         self.imagesDialog.exec_()
 
-    def pushButton5_clicked(self):
+    def pushButton5_clicked(self): ##Reject
         annotations = None
-        annotations = self.json_generator.generate_contour_data(self.current_image_path, self.current_mask_path, self.via_style)
+        annotations = self.json_generator.generate_rejected_contour_data(self.current_image_path, self.current_mask_path, self.via_style)
         if annotations is not None:
             self.textEdit.setText(pprint.pformat(annotations, indent=4))
         else:
             self.textEdit.setText('ERROR: No JSON generated!')
         self._displayImageMaskPair()       
 
-    def pushButton6_clicked(self): 
+    def pushButton6_clicked(self): ##Accept
+        self.json_generator.generate_accepted_contour_data(self.current_image_path, self.current_mask_path, self.via_style) 
         self._displayImageMaskPair()
 
-    def pushButton8_clicked(self): 
+    def pushButton8_clicked(self): ##Cancel
         self.imageLabel.clear()
-        self.json_generator.clear_annotations()
         self.tabWidget.setTabEnabled(1, False)
         self.tabWidget.setCurrentIndex(0)
 
         annotations = None
-        annotations = self.json_generator.get_annotations(self.via_style)
+        annotations = self.json_generator.save_annotations(self.via_style)
         if annotations is not None:
             self.textEdit.setText(pprint.pformat(annotations, indent=4))
             os.system("xdg-open '%s'" % self.imagesDialog.images_directory)
@@ -225,7 +220,7 @@ class Ui_MainWindow(object):
 
     def collectImageMaskPairs(self):
         if not self.json_generator.set_directories(self.imagesDialog.images_directory, self.imagesDialog.masks_directory, self.imagesDialog.annotations_file):
-            QMessageBox.information(self.imagesDialog, "Annotations", "The section '_via_img_metadata' was not found in the annotations file %s."%self.imagesDialog.annotations_file)
+            QMessageBox.information(self.mainWindow, "Annotations", "The section '_via_img_metadata' was not found in the annotations file %s."%self.mainWindow.annotations_file)
         
         self.image_paths, self.mask_paths = self.json_generator.load_paths()
         print(len(self.image_paths), len(self.mask_paths))
@@ -235,7 +230,10 @@ class Ui_MainWindow(object):
             self.tabWidget.setTabEnabled(1, True) ##Tab for displaying images
             self._displayImageMaskPair()
         else:
-            QMessageBox.information(self.imagesDialog, "Images", "No images with corresponding masks in %s were found in %s."%(self.imagesDialog.masks_directory, self.imagesDialog.images_directory))
+            if self.imagesDialog.is_ongoing_project():
+                QMessageBox.information(self.mainWindow, "Images", "No new images with corresponding masks in %s were found in %s."%(self.imagesDialog.masks_directory, self.imagesDialog.images_directory))
+            else:
+                QMessageBox.information(self.mainWindow, "Images", "No images with corresponding masks in %s were found in %s."%(self.imagesDialog.masks_directory, self.imagesDialog.images_directory))
 
     def _displayImageMaskPair(self):
         if len(self.image_paths) > 0 and len(self.mask_paths) > 0:
@@ -248,7 +246,7 @@ class Ui_MainWindow(object):
             if display is not None:
                 self.imageLabel.setPixmap(QPixmap(display).scaled(self.imageLabel.width(), self.imageLabel.height(), QtCore.Qt.KeepAspectRatio))
             else:
-                QMessageBox.information(self.imagesDialog, "Images", "Either image %s or corresponding mask %s was not found."%(self.current_image_path, self.current_mask_path))
+                QMessageBox.information(self.mainWindow, "Images", "Either image %s or corresponding mask %s was not found."%(self.current_image_path, self.current_mask_path))
                     
         else:
             self.imageLabel.clear()
@@ -262,23 +260,23 @@ class Ui_MainWindow(object):
         annotations = None
 
         if not self.json_generator.set_directories(self.imagesDialog.images_directory, self.imagesDialog.masks_directory, self.imagesDialog.annotations_file):
-            QMessageBox.information(self.imagesDialog, "Annotations", "The section '_via_img_metadata' was not found in the annotations file %s."%self.imagesDialog.annotations_file)
+            QMessageBox.information(self.mainWindow, "Annotations", "The section '_via_img_metadata' was not found in the annotations file %s."%self.imagesDialog.annotations_file)
 
-        self.json_generator.load_paths()
+        self.image_paths, self.mask_paths = self.json_generator.load_paths()
+ 
         annotations = self.json_generator.generate_JSON(self.via_style)
+        
+        if len(self.image_paths) == 0 or len(self.mask_paths) == 0:
+            if self.imagesDialog.is_ongoing_project():
+                QMessageBox.information(self.mainWindow, "Images", "No new images with corresponding masks in %s were found in %s."%(self.imagesDialog.masks_directory, self.imagesDialog.images_directory))
+            else:
+                QMessageBox.information(self.mainWindow, "Images", "No images with corresponding masks in %s were found in %s."%(self.imagesDialog.masks_directory, self.imagesDialog.images_directory))
 
         if annotations is not None:
             self.textEdit.setText(pprint.pformat(annotations, indent=4))
             os.system("xdg-open '%s'" % self.imagesDialog.images_directory)
         else:
             self.textEdit.setText('ERROR: No JSON generated!')
-
-    def webView_loaded(self):
-        ##read javascript file
-        with open("via-master/via-2.x.y/src/via.js", 'r') as js_file:
-            js_content = js_file.read()
-        self.webView.page().runJavaScript(js_content)
-        self.webView.page().runJavaScript("project_open_select_project_file()")
 
 if __name__ == "__main__":
     import sys

@@ -12,6 +12,7 @@ from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import QDialog, QLineEdit, QFileDialog, QMessageBox
 
 import os
+import cv2
 
 from MaskGenerator import MaskGenerator
 
@@ -19,6 +20,7 @@ class MasksDialog(QDialog):
 
     showProgressBar = pyqtSignal()
     hideProgressBar = pyqtSignal()
+    updateProgressBar = pyqtSignal(int, int)
 
     def __init__(self, parent):
         super(MasksDialog, self).__init__(parent)
@@ -32,48 +34,52 @@ class MasksDialog(QDialog):
     def accept(self):
         if len(self.images_directory) == 0 or len(self.weights_file) == 0:
             if len(self.images_directory) == 0:
-                QMessageBox.warning(self, "Images", "Set Images Folder!")
+                QMessageBox.information(self, "Images", "Set Images Folder!")
             elif len(self.weights_file) == 0:
-                QMessageBox.warning(self, "Weights", "Set Weights File!")
+                QMessageBox.information(self, "Weights", "Set Weights File!")
 
         else:
+            self.generator.reset()
             self.showProgressBar.emit()
+            
             self.masks_directory = self.generator.set_masks_directory(self.images_directory)
 
             if os.path.isfile(self.weights_file):
                 self.generator.load_weights(self.weights_file)
             else:
-                QMessageBox.information(None, "Weights", "Weights file %s was not found."%self.weights_file)
+                QMessageBox.information(self, "Weights", "Weights file %s was not found."%self.weights_file)
 
             if os.path.isdir(self.images_directory):
-                masks_instances = 0
+                mask_instances = 0
                 images_processed = 0
 
                 images = os.listdir(self.images_directory)
                 total_images = len(images)
 
                 for filename in images:
-                    mask_generated = False
                     image_path = os.path.join(self.images_directory, filename)
                     if os.path.isfile(image_path):
-                        mask_generated = self.generator.generate_masks(image_path)
+                        mask_generated = False
+                        image = cv2.imread(image_path)
+                        if image is not None:
+                            mask_generated = self.generator.generate_mask(image, filename)
 
-                    images_processed += 1
-                    self.progressBar.setValue(images_processed // total_images)
+                        images_processed += 1
+                        self.updateProgressBar.emit(images_processed, total_images)
 
-                    if mask_generated:
-                        masks_instances += 1
-                    else:
-                        QMessageBox.information(None, "Mask", "Mask was not generated for %s. The file could not be opened."%image_path)
+                        if mask_generated:
+                            mask_instances += 1
+                        else:
+                            QMessageBox.information(self, "Mask", "Mask was not generated for %s. The file could not be opened."%image_path)
             else:
-                QMessageBox.information(None, "Images", "Images Folder %s was not found."%self.images_directory)
+                QMessageBox.information(self, "Images", "Images Folder %s was not found."%self.images_directory)
 
             if mask_instances > 0:
                 os.system("xdg-open '%s'" % self.masks_directory)
 
             self.hideProgressBar.emit()
 
-        super(MasksDialog, self).accept()
+            super(MasksDialog, self).accept()
 
 class Ui_masksDialog(object):
     def setupUi(self, masksDialog):
@@ -126,12 +132,15 @@ class Ui_masksDialog(object):
 
         self.dialogBox.showProgressBar.connect(self.progressBar.show)
         self.dialogBox.hideProgressBar.connect(self.progressBar.hide)
+        self.dialogBox.updateProgressBar.connect(self.progressBar_update)
 
     def retranslateUi(self, masksDialog):
         _translate = QtCore.QCoreApplication.translate
         masksDialog.setWindowTitle(_translate("masksDialog", "Dialog"))
         self.label.setText(_translate("masksDialog", "Images Folder"))
-        self.label_2.setText(_translate("masksDialog", "Annotations File"))
+        self.label_2.setText(_translate("masksDialog", "Weights File"))
+        self.lineEdit.setToolTip(_translate("imagesDialog", "Enter the path of the folder that contains the images"))
+        self.lineEdit_2.setToolTip(_translate("imagesDialog", "Set the path to the weights file for Mask-RCNN."))
 
     def lineEdit_clicked(self, event):
         input_dir = QFileDialog.getExistingDirectory(self.dialogBox, 'Select a folder:', self.dialogBox.last_directory)
@@ -149,6 +158,9 @@ class Ui_masksDialog(object):
                 self.dialogBox.weights_file = path
                 self.dialogBox.last_directory = path[:path.rfind(os.path.sep)]
         self.lineEdit_2.setText(self.dialogBox.weights_file)
+
+    def progressBar_update(self, current_value, maximum_value):
+        self.progressBar.setValue(current_value // maximum_value)
 
 
 if __name__ == "__main__":

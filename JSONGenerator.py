@@ -6,6 +6,52 @@ import shutil
 from datetime import datetime
 from PyQt5.QtGui import QImage
 
+def process_contours_in_image(annotations, image, mask, contours, size, filename, via_style):
+	file_key = filename + str(size)
+
+	annotations['_via_img_metadata'][file_key] = {}
+	annotations['_via_img_metadata'][file_key]['filename'] = filename
+
+	if via_style:
+		annotations['_via_img_metadata'][file_key]['size'] = size
+
+	annotations['_via_img_metadata'][file_key]['height'] = np.int(image.shape[0])
+	annotations['_via_img_metadata'][file_key]['width'] = np.int(image.shape[1])
+
+	annotations['_via_img_metadata'][file_key]['file_attributes'] = {} ##Empty
+	annotations['_via_img_metadata'][file_key]['regions'] = []
+
+	regions = []
+	for contour in contours:
+		x, y, w, h = cv2.boundingRect(contour)
+		if w * h < image.shape[0] * image.shape[1]:
+			cntr = {}
+			cntr['shape_attributes'] = {}
+			cntr['shape_attributes']['name'] = 'polygon'
+			cntr['shape_attributes']['all_points_x'] = []
+			cntr['shape_attributes']['all_points_y'] = []
+
+			X = []
+			Y = []
+			for pt in contour:
+				x = pt[0][0]
+				y = pt[0][1]
+				if x >= 0 and x < image.shape[1] and y >= 0 and y < image.shape[0]:
+					X.append(np.int(x))
+					Y.append(np.int(y))
+
+			if len(X) > 0: ##or len(Y) > 0, both will be of equal length
+				cntr['shape_attributes']['all_points_x'] = X
+				cntr['shape_attributes']['all_points_y'] = Y
+
+				cntr['region_attributes'] = {} ##Empty
+
+				regions.append(cntr)
+
+	annotations['_via_img_metadata'][file_key]['regions'] = regions
+
+	return annotations
+
 class JSONGenerator:
 	def __init__(self):
 		self.images_directory = ''
@@ -13,13 +59,18 @@ class JSONGenerator:
 		self.image_paths = []
 		self.mask_paths = []
 		self.already_annotated = []
+		self.image_contours = None
+
+		self.current_image = None
+		self.current_mask = None
+		self.current_image_contours = []
 
 		##via_img_metadata
 		self.annotations = {}
 		self.annotations['_via_img_metadata'] = {}
 
-		# self.accepted_annotations = {}
-		# self.accepted_annotations['_via_img_metadata'] = {}
+		self.accepted_annotations = {}
+		self.accepted_annotations['_via_img_metadata'] = {}
 
 		self.time_string = datetime.now().strftime("%m-%d-%Y||%H:%M:%S")
 
@@ -27,7 +78,7 @@ class JSONGenerator:
 		for filename in os.listdir(self.images_directory):
 			if filename not in self.already_annotated:
 				path = os.path.join(self.images_directory, filename)
-				if os.path.isfile(path):
+				if os.path.isfile(path) and cv2.imread(path) is not None:
 					file_name = filename.split('.')[0]
 					for mask_name in os.listdir(self.masks_directory):
 						mask_path = ''
@@ -37,7 +88,7 @@ class JSONGenerator:
 									mask_path = os.path.join(self.masks_directory, mask_name)
 							else:
 								mask_path = os.path.join(self.masks_directory, mask_name)
-							if os.path.isfile(mask_path):
+							if os.path.isfile(mask_path) and cv2.imread(mask_path) is not None:
 								self.image_paths.append(path)
 								self.mask_paths.append(mask_path)
 								break
@@ -48,15 +99,28 @@ class JSONGenerator:
 		self.images_directory = os.path.join(images_directory, '') ##add trailing seperator
 		self.masks_directory = masks_directory
 
-		if len(annotations_file) > 0:
-			annotations = json.load(open(annotations_file, 'r'))
+		contours_file = os.path.join(masks_directory, 'contours.json')
+		if os.path.isfile(contours_file):
+			self.image_contours = json.load(open(contours_file, 'r'))
 
-			if '_via_img_metadata' not in self.annotations.keys():
+		if len(annotations_file) > 0:
+			old_annotations = json.load(open(annotations_file, 'r'))
+
+			if '_via_img_metadata' not in old_annotations.keys():
 				return False
 
-			self.already_annotated = [filedata['filename'] for filedata in annotations['_via_img_metadata'].values()]
-			self.annotations['_via_img_metadata'] = self.annotations['_via_img_metadata']
+			self.already_annotated = [filedata['filename'] for filedata in old_annotations['_via_img_metadata'].values()]
+			
+			for key in old_annotations['_via_img_metadata'].keys():
+				if 'accepted' in old_annotations['_via_img_metadata'][key].keys():
+					if old_annotations['_via_img_metadata'][key]['accepted']:
+						self.accepted_annotations['_via_img_metadata'][key] = old_annotations['_via_img_metadata'][key]
+					else:
+						self.annotations['_via_img_metadata'][key] = old_annotations['_via_img_metadata'][key]
 
+				else:
+					self.annotations['_via_img_metadata'][key] = old_annotations['_via_img_metadata'][key]
+					
 		return True
 
 	def _style_annotations_for_VIA(self):
@@ -98,85 +162,86 @@ class JSONGenerator:
 			self.annotations["_via_attributes"]["region"] = {}
 			self.annotations["_via_attributes"]["file"] = {}
 
-	def _process_contours_in_image(self, image, mask, contours, size, filename, via_style):
-		file_key = filename + str(size)
+	def generate_rejected_contour_data(self, image_path, mask_path, via_style):
+		if self.current_image is None:
+			self.current_image = cv2.imread(image_path)
 
-		self.annotations['_via_img_metadata'][file_key] = {}
-		self.annotations['_via_img_metadata'][file_key]['filename'] = filename
+		if self.current_mask is None:
+			self.current_mask = cv2.imread(mask_path)
 
-		if via_style:
-			self.annotations['_via_img_metadata'][file_key]['size'] = size
-
-		else:
-			self.annotations['_via_img_metadata'][filename]['height'] = np.int(image.shape[0])
-			self.annotations['_via_img_metadata'][filename]['width'] = np.int(image.shape[1])
-
-		self.annotations['_via_img_metadata'][file_key]['file_attributes'] = {} ##Empty
-		self.annotations['_via_img_metadata'][file_key]['regions'] = []
-
-		regions = []
-		for contour in contours:
-			x, y, w, h = cv2.boundingRect(contour)
-			if w * h < image.shape[0] * image.shape[1]:
-				cntr = {}
-				cntr['shape_attributes'] = {}
-				cntr['shape_attributes']['name'] = 'polygon'
-				cntr['shape_attributes']['all_points_x'] = []
-				cntr['shape_attributes']['all_points_y'] = []
-
-				X = []
-				Y = []
-				for pt in contour:
-					x = pt[0][0]
-					y = pt[0][1]
-					if x >= 0 and x < image.shape[1] and y >= 0 and y < image.shape[0]:
-						X.append(np.int(x))
-						Y.append(np.int(y))
-
-				if len(X) > 0: ##or len(Y) > 0, both will be of equal length
-					cntr['shape_attributes']['all_points_x'] = X
-					cntr['shape_attributes']['all_points_y'] = Y
-
-					cntr['region_attributes'] = {} ##Empty
-
-					regions.append(cntr)
-
-		if len(regions) > 0:
-			self.annotations['_via_img_metadata'][file_key]['regions'] = regions
-		else:
-			self.annotations['_via_img_metadata'].pop(file_key)
-
-	def generate_contour_data(self, image_path, mask_path, via_style):
-		image = cv2.imread(image_path)
-		mask = cv2.imread(mask_path)
-		if image is not None and mask is not None:
-			contour_image = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
-			ret, contour_image = cv2.threshold(contour_image, 127, 255, cv2.THRESH_BINARY)
-			contours, _ = cv2.findContours(contour_image, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-			size = os.path.getsize(image_path)
-			filename = image_path.split(os.path.sep)[-1]
-			self._process_contours_in_image(image, mask, contours, size, filename, via_style)
-
-			if len(self.annotations['_via_img_metadata'].keys()) > 0:
-				with open(os.path.join(self.images_directory, 'annotations_%s.json'%self.time_string), 'w') as outfile:
-					json.dump(self.annotations, outfile)
+		filename = image_path.split(os.path.sep)[-1]
 
 		if via_style:
 			self._style_annotations_for_VIA()
+
+		if self.current_image is not None and self.current_mask is not None:
+			if len(self.current_image_contours) == 0:
+				if self.image_contours is not None and filename in self.image_contours.keys():
+					self.current_image_contours = self.image_contours[filename]
+				else:
+					_, _, contour_image = cv2.split(self.current_mask)
+					ret, contour_image = cv2.threshold(contour_image, 127, 255, cv2.THRESH_BINARY)
+					self.current_image_contours, _ = cv2.findContours(contour_image, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+			if len(self.current_image_contours) > 0:
+				self.current_image_contours = [np.array(contour, dtype=np.int64) for contour in self.current_image_contours]
+
+			size = os.path.getsize(image_path)
+			self.annotations = process_contours_in_image(self.annotations, self.current_image, self.current_mask, self.current_image_contours, size, filename, via_style)
+
+			if len(self.annotations['_via_img_metadata'].keys()) > 0:
+				with open(os.path.join(self.images_directory, 'annotations_rejected_%s.json'%self.time_string), 'w') as outfile:
+					json.dump(self.annotations, outfile)
 
 		if len(self.annotations['_via_img_metadata'].keys()) > 0:
 			return self.annotations
 		else:
 			return None
 
+	def generate_accepted_contour_data(self, image_path, mask_path, via_style):
+		if self.current_image is None:
+			self.current_image = cv2.imread(image_path)
+
+		if self.current_mask is None:
+			self.current_mask = cv2.imread(mask_path)
+
+		filename = image_path.split(os.path.sep)[-1]
+
+		if self.current_image is not None and self.current_mask is not None:
+			if len(self.current_image_contours) == 0:
+				if self.image_contours is not None and filename in self.image_contours.keys():
+					self.current_image_contours = self.image_contours[filename]
+				else:
+					_, _, contour_image = cv2.split(self.current_mask)
+					ret, contour_image = cv2.threshold(contour_image, 127, 255, cv2.THRESH_BINARY)
+					self.current_image_contours, _ = cv2.findContours(contour_image, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+			if len(self.current_image_contours) > 0:
+				self.current_image_contours = [np.array(contour, dtype=np.int64) for contour in self.current_image_contours]
+
+			size = os.path.getsize(image_path)
+			self.accepted_annotations = process_contours_in_image(self.accepted_annotations, self.current_image, self.current_mask, self.current_image_contours, size, filename, via_style)
+
+			if len(self.annotations['_via_img_metadata'].keys()) > 0:
+				with open(os.path.join(self.images_directory, 'annotations_accepted_%s.json'%self.time_string), 'w') as outfile:
+					json.dump(self.accepted_annotations, outfile)
+
 	def generate_JSON(self, via_style):
 		if via_style:
 			self._style_annotations_for_VIA()
 
-		for image_path, mask_path in zip(self.image_paths, self.mask_paths):
-			self.generate_contour_data(image_path, mask_path, via_style)
+		if len(self.image_paths) > 0 and len(self.mask_paths) > 0:
+			for image_path, mask_path in zip(self.image_paths, self.mask_paths):
+				self.current_image = None
+				self.current_mask = None
+				self.current_image_contours = []
 
-		if len(self.annotations['_via_img_metadata'].keys()) > 0:
+				self.generate_rejected_contour_data(image_path, mask_path, via_style)
+
+		with open(os.path.join(self.images_directory, 'annotations_rejected_%s.json'%self.time_string), 'w') as outfile:
+			json.dump(self.annotations, outfile)
+
+		if len(self.annotations['_via_img_metadata'].keys()) > 0:			
 			return self.annotations
 		else:
 			return None
@@ -187,19 +252,37 @@ class JSONGenerator:
 		self.image_paths = []
 		self.mask_paths = []
 		self.already_annotated = []
+		self.image_contours = None
+		
+		self.current_image = None
+		self.current_mask = None
+		self.current_image_contours = []
 
 		##via_img_metadata
 		self.annotations = {}
 		self.annotations['_via_img_metadata'] = {}
 
+		##via_img_metadata
+		self.accepted_annotations = {}
+		self.accepted_annotations['_via_img_metadata'] = {}
+
 		self.time_string = datetime.now().strftime("%m-%d-%Y||%H:%M:%S")
 
-	def get_annotations(self, via_style):
+	def save_annotations(self, via_style):
 		if via_style:
 			self._style_annotations_for_VIA()
 
+		for key in self.accepted_annotations['_via_img_metadata'].keys():
+			self.accepted_annotations['_via_img_metadata'][key]['accepted'] = True
+		
+		for key in self.annotations['_via_img_metadata'].keys():
+			self.annotations['_via_img_metadata'][key]['accepted'] = False
+
+		for key in self.accepted_annotations['_via_img_metadata'].keys():
+			self.annotations['_via_img_metadata'][key] = self.accepted_annotations['_via_img_metadata'][key]
+
 		if len(self.annotations['_via_img_metadata'].keys()) > 0:
-			with open(os.path.join(self.images_directory, 'annotations_%s.json'%self.time_string), 'w') as outfile:
+			with open(os.path.join(self.images_directory, 'annotations_saved_%s.json'%self.time_string), 'w') as outfile:
 				json.dump(self.annotations, outfile)	
 
 			return self.annotations
@@ -208,14 +291,27 @@ class JSONGenerator:
 			return None
 
 	def generate_display_image(self, image_path, mask_path):
-		image = cv2.imread(image_path)
-		mask = cv2.imread(mask_path)
-		if image is not None and mask is not None:
-			_, _, contour_image = cv2.split(mask)
-			ret, contour_image = cv2.threshold(contour_image, 127, 255, cv2.THRESH_BINARY)
-			contours, _ = cv2.findContours(contour_image, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-			display_mask = cv2.drawContours(mask, contours, -1, (0, 255, 0), 10)
-			display = np.concatenate([image, display_mask], axis=1)
+		self.current_image = cv2.imread(image_path)
+		self.current_mask = cv2.imread(mask_path)
+		self.current_image_contours = []
+
+		if self.current_image is not None and self.current_mask is not None:
+			filename = image_path.split(os.path.sep)[-1]
+			if len(self.current_image_contours) == 0:
+				if self.image_contours is not None and filename in self.image_contours.keys():
+					self.current_image_contours = self.image_contours[filename]
+				else:
+					_, _, contour_image = cv2.split(self.current_mask)
+					ret, contour_image = cv2.threshold(contour_image, 127, 255, cv2.THRESH_BINARY)
+					self.current_image_contours, _ = cv2.findContours(contour_image, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+			if len(self.current_image_contours) > 0:
+				self.current_image_contours = [np.array(contour, dtype=np.int64) for contour in self.current_image_contours]
+				display_mask = cv2.drawContours(self.current_mask, self.current_image_contours, -1, (0, 255, 0), 10)
+			else:
+				display_mask = self.current_mask
+
+			display = np.concatenate([self.current_image, display_mask], axis=1)
 			display = cv2.cvtColor(display, cv2.COLOR_BGR2RGB)
 
 			return QImage(display.data, display.shape[1], display.shape[0], display.strides[0], QImage.Format_RGB888)
